@@ -49,13 +49,14 @@ const pMapeados = pRaw.map(p => ({
   stock: parseInt(p.stock) || 0,
   categoria: p.categoria || "Sin categoría"
 }));
-
-      // Normalizamos Clientes (asumiendo estructura similar)
+// Normalizamos Clientes
       const cMapeados = cRaw.map(c => ({
         id: c.ID || c.id,
         nombre: c.nombre || c.Nombre,
-        // Agregá acá otros campos que necesites de clientes
+        // Agregamos esto para leer la nueva columna del Excel
+        telefono: c.telefono || c.Telefono || '', 
       }));
+
 
       setClientes(cMapeados);
       setProductos(pMapeados);
@@ -133,22 +134,58 @@ const pMapeados = pRaw.map(p => ({
     const clienteReal = clientes.find(c => String(c.id) === String(clienteId))
     if (!clienteReal) return alert('Error identificando al cliente')
 
+    // Calculamos total
+    const totalSafe = carrito.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0);
+
     const nuevoPedido = {
       id: Date.now(),
-      fecha: new Date().toLocaleString('es-AR'), // Fecha formato local
+      fecha: new Date().toLocaleString('es-AR'),
       cliente: clienteReal.nombre,
       items: carrito,
-      // Usamos Number() para asegurar que guarde un dato matemático, no texto
-      total: carrito.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0),
+      total: totalSafe,
       observacion: observacion || '' 
     }
 
+    // Guardar en Historial
     const historial = JSON.parse(localStorage.getItem('pedidos')) || []
     localStorage.setItem('pedidos', JSON.stringify([...historial, nuevoPedido]))
 
-    alert('✅ Pedido Guardado en el Historial')
+    // --- LÓGICA WHATSAPP INTELIGENTE ---
+    let mensaje = `*NUEVO PEDIDO* 📋\n`;
+    mensaje += `👤 *Cliente:* ${clienteReal.nombre}\n`;
+    mensaje += `📅 *Fecha:* ${new Date().toLocaleDateString('es-AR')}\n`;
+    mensaje += `--------------------------\n`;
     
-    // Resetear formulario
+    carrito.forEach(item => {
+      const sub = Number(item.subtotal).toLocaleString('es-AR');
+      mensaje += `▪️ ${item.cantidad} x ${item.nombre} ($ ${sub})\n`;
+    });
+
+    mensaje += `--------------------------\n`;
+    mensaje += `💰 *TOTAL: $ ${totalSafe.toLocaleString('es-AR')}*\n`;
+    if (observacion) mensaje += `📝 *Nota:* ${observacion}`;
+
+    // PREPARAR NÚMERO
+    let telefonoDestino = '';
+    
+    if (clienteReal.telefono) {
+      // Limpieza agresiva: quitamos espacios, guiones y paréntesis
+      let sucio = String(clienteReal.telefono).replace(/\D/g, '');
+      
+      // Ajuste "Argentino": Si tiene 10 dígitos (ej: 3644123456), le agregamos el 549 adelante
+      if (sucio.length === 10) {
+        telefonoDestino = '549' + sucio;
+      } else {
+        telefonoDestino = sucio;
+      }
+    }
+
+    // Si tenemos número, va directo. Si no, va vacío (abre lista de contactos)
+    const urlWhatsApp = `https://wa.me/${telefonoDestino}?text=${encodeURIComponent(mensaje)}`;
+    
+    window.open(urlWhatsApp, '_blank');
+
+    // Limpieza
     setCarrito([])
     setClienteId('')
     setBusquedaCliente('')
