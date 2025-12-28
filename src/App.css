@@ -1,0 +1,44 @@
+/* Contenedor principal centrado */
+.main-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 80vh;
+  font-family: Arial, sans-serif;
+}
+
+/* Grilla para los botones */
+.menu-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 300px; /* Ancho máximo similar a un celular */
+  margin-top: 20px;
+}
+
+/* Estilo de los botones */
+.menu-btn {
+  padding: 20px;
+  font-size: 1.1rem;
+  font-weight: bold;
+  cursor: pointer;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background-color: #f9f9f9;
+  color: #333;
+  transition: background-color 0.2s;
+}
+
+.menu-btn:hover {
+  background-color: #e0e0e0;
+}
+
+/* Botón de sincronizar destacado */
+.sync-btn {
+  background-color: #e3f2fd;
+  border-color: #2196f3;
+  color: #0d47a1;
+  margin-top: 10px;
+}
