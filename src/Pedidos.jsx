@@ -1,6 +1,20 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 
+const limpiarPrecio = (precioSucio) => {
+  if (typeof precioSucio !== 'string') return precioSucio;
+  
+  // 1. Quitamos el signo $ y los puntos de miles
+  // 2. Reemplazamos la coma decimal por un punto
+  const limpio = precioSucio
+    .replace('$', '')
+    .replace(/\./g, '') 
+    .replace(',', '.');
+    
+  return parseFloat(limpio) || 0;
+};
+
+
 function Pedidos({ onVolver }) {
   // --- ESTADOS ---
   const [clientes, setClientes] = useState([])
@@ -27,13 +41,14 @@ function Pedidos({ onVolver }) {
       const pRaw = JSON.parse(localStorage.getItem('productos')) || [];
 
       // Normalizamos Productos (según tu Excel)
-      const pMapeados = pRaw.map(p => ({
-        id: p.ID || p.id, // Acepta ID (CRM) o id (App)
-        nombre: p.nombre || p.Nombre,
-        precio: parseFloat(p.precio) || 0,
-        stock: parseInt(p.stock) || 0,
-        categoria: p.categoria || "Sin categoría"
-      }));
+      // Dentro del try del useEffect de Pedidos.jsx
+const pMapeados = pRaw.map(p => ({
+  id: p.ID || p.id,
+  nombre: p.nombre || p.Nombre,
+  precio: limpiarPrecio(p.precio), // <--- ACÁ USAMOS LA FUNCIÓN
+  stock: parseInt(p.stock) || 0,
+  categoria: p.categoria || "Sin categoría"
+}));
 
       // Normalizamos Clientes (asumiendo estructura similar)
       const cMapeados = cRaw.map(c => ({
