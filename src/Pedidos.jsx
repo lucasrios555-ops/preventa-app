@@ -123,27 +123,27 @@ const pMapeados = pRaw.map(p => ({
     setCarrito(carrito.filter(item => item.id !== id))
   }
 
-  // --- FINALIZAR ---
   const finalizarPedido = () => {
     if (carrito.length === 0) return alert('Carrito vacío')
     if (!clienteId) return alert('Falta Cliente')
 
-    const clienteReal = clientes.find(c => c.id === parseInt(clienteId))
+    const clienteReal = clientes.find(c => String(c.id) === String(clienteId))
     if (!clienteReal) return alert('Error identificando al cliente')
 
     const nuevoPedido = {
       id: Date.now(),
-      fecha: new Date().toLocaleString(),
+      fecha: new Date().toLocaleString('es-AR'), // Fecha formato local
       cliente: clienteReal.nombre,
       items: carrito,
-      total: carrito.reduce((acc, item) => acc + item.subtotal, 0),
+      // Usamos Number() para asegurar que guarde un dato matemático, no texto
+      total: carrito.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0),
       observacion: observacion || '' 
     }
 
     const historial = JSON.parse(localStorage.getItem('pedidos')) || []
     localStorage.setItem('pedidos', JSON.stringify([...historial, nuevoPedido]))
 
-    alert('✅ Pedido Guardado')
+    alert('✅ Pedido Guardado en el Historial')
     
     // Resetear formulario
     setCarrito([])
@@ -312,9 +312,7 @@ const pMapeados = pRaw.map(p => ({
           </div>
         )}
 
-        <div style={{ marginTop: '20px', fontSize: '1.4rem', fontWeight: 'bold', color: 'white', textAlign: 'right' }}>
-          Total: ${carrito.reduce((acc, i) => acc + i.subtotal, 0)}
-        </div>
+        
 
         {/* --- CAMPO OBSERVACIONES --- */}
         <div style={{ marginTop: '20px' }}>
