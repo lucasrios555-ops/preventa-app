@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 
-const limpiarPrecio = (precioSucio) => {
-  if (typeof precioSucio !== 'string') return precioSucio;
+const limpiarPrecio = (valor) => {
+  if (typeof valor === 'number') return valor;
+  if (!valor) return 0;
   
-  // 1. Quitamos el signo $ y los puntos de miles
-  // 2. Reemplazamos la coma decimal por un punto
-  const limpio = precioSucio
-    .replace('$', '')
-    .replace(/\./g, '') 
+  // Elimina $, puntos de miles y cambia coma por punto decimal
+  const limpio = valor.toString()
+    .replace(/\$/g, '')
+    .replace(/\./g, '')
     .replace(',', '.');
     
   return parseFloat(limpio) || 0;
@@ -95,16 +95,22 @@ const pMapeados = pRaw.map(p => ({
     if (!productoId) return alert('Selecciona un producto')
     if (cantidad < 1) return alert('Cantidad incorrecta')
 
-    const productoReal = productos.find(p => p.id === parseInt(productoId))
+    // Quitamos el parseInt porque si el ID en el Excel es un string, no coincidirá
+    const productoReal = productos.find(p => String(p.id) === String(productoId))
+    
     if (!productoReal) return
+
+    // Usamos nuestra función limpiadora para asegurar que sea un número real
+    const precioNumerico = limpiarPrecio(productoReal.precio)
+    const cantidadNumerica = parseInt(cantidad)
 
     const nuevoItem = {
       id: Date.now(),
       productoId: productoReal.id,
       nombre: productoReal.nombre,
-      precio: parseFloat(productoReal.precio),
-      cantidad: parseInt(cantidad),
-      subtotal: parseFloat(productoReal.precio) * parseInt(cantidad)
+      precio: precioNumerico,
+      cantidad: cantidadNumerica,
+      subtotal: precioNumerico * cantidadNumerica
     }
 
     setCarrito([...carrito, nuevoItem])
@@ -258,19 +264,52 @@ const pMapeados = pRaw.map(p => ({
       {/* CARRITO Y TOTALES */}
       <div style={{ width: '100%', maxWidth: '350px', borderTop: '1px solid #444', paddingTop: '20px' }}>
         {carrito.length === 0 ? (
-          <p style={{ textAlign: 'center', color: '#666' }}>El carrito está vacío</p>
+          <p style={{ textAlign: 'center', color: '#666', fontStyle: 'italic' }}>El carrito está vacío</p>
         ) : (
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {carrito.map(item => (
-              <li key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #333', color: '#eee' }}>
-                <span><b>{item.cantidad}</b> x {item.nombre}</span>
-                <div style={{ display: 'flex', gap: '15px' }}>
-                  <span>${item.subtotal}</span>
-                  <button onClick={() => eliminarDelCarrito(item.id)} style={{ background: 'none', border: 'none', color: '#ff5252', cursor: 'pointer' }}>X</button>
+              <li key={item.id} style={{ 
+                display: 'flex', 
+                flexDirection: 'column', // Mejor para pantallas móviles pequeñas
+                padding: '12px 0', 
+                borderBottom: '1px solid #333' 
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <span style={{ color: '#eee', fontSize: '0.95rem' }}>
+                    <b style={{ color: '#2196f3' }}>{item.cantidad}</b> x {item.nombre}
+                  </span>
+                  <button 
+                    onClick={() => eliminarDelCarrito(item.id)} 
+                    style={{ background: 'none', border: 'none', color: '#ff5252', cursor: 'pointer', fontWeight: 'bold', padding: '0 5px' }}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div style={{ textAlign: 'right', color: '#888', fontSize: '0.85rem' }}>
+                  {/* Formateamos el subtotal para que se vea como $ 5.300,00 */}
+                  Subtotal: ${Number(item.subtotal).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                 </div>
               </li>
             ))}
           </ul>
+        )}
+
+        {/* Total General */}
+        {carrito.length > 0 && (
+          <div style={{ 
+            marginTop: '20px', 
+            padding: '15px', 
+            background: '#1a1a1a', 
+            borderRadius: '8px', 
+            border: '1px solid #333' 
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: '#aaa', fontSize: '1rem' }}>Total Pedido:</span>
+              <span style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#4caf50' }}>
+                ${carrito.reduce((acc, i) => acc + (Number(i.subtotal) || 0), 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
         )}
 
         <div style={{ marginTop: '20px', fontSize: '1.4rem', fontWeight: 'bold', color: 'white', textAlign: 'right' }}>
