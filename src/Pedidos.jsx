@@ -95,23 +95,26 @@ const pMapeados = pRaw.map(p => ({
     if (!productoId) return alert('Selecciona un producto')
     if (cantidad < 1) return alert('Cantidad incorrecta')
 
-    // Quitamos el parseInt porque si el ID en el Excel es un string, no coincidirá
     const productoReal = productos.find(p => String(p.id) === String(productoId))
     
     if (!productoReal) return
 
-    // Usamos nuestra función limpiadora para asegurar que sea un número real
-    const precioNumerico = limpiarPrecio(productoReal.precio)
-    const cantidadNumerica = parseInt(cantidad)
+    // 1. Forzamos conversión numérica estricta
+    const precioFinal = Number(productoReal.precio) || 0;
+    const cantidadFinal = parseInt(cantidad) || 1;
+    const subtotalFinal = precioFinal * cantidadFinal;
 
     const nuevoItem = {
       id: Date.now(),
       productoId: productoReal.id,
       nombre: productoReal.nombre,
-      precio: precioNumerico,
-      cantidad: cantidadNumerica,
-      subtotal: precioNumerico * cantidadNumerica
+      precio: precioFinal,
+      cantidad: cantidadFinal,
+      subtotal: subtotalFinal // Acá garantizamos que sea un número
     }
+
+    // Debug para ver en consola si algo falla
+    console.log("Agregando item:", nuevoItem);
 
     setCarrito([...carrito, nuevoItem])
     setProductoId('')
@@ -179,6 +182,12 @@ const pMapeados = pRaw.map(p => ({
     borderRadius: '8px',
     boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
   }
+// --- CÁLCULOS (Estado Derivado) ---
+  // Calculamos el total aquí afuera para evitar errores visuales
+  const totalGeneral = carrito.reduce((acumulador, item) => {
+    return acumulador + (Number(item.subtotal) || 0);
+  }, 0);
+
 
   // --- RENDERIZADO ---
   return (
@@ -306,7 +315,7 @@ const pMapeados = pRaw.map(p => ({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ color: '#aaa', fontSize: '1rem' }}>Total Pedido:</span>
               <span style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#4caf50' }}>
-                ${carrito.reduce((acc, i) => acc + (Number(i.subtotal) || 0), 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                ${totalGeneral.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
               </span>
             </div>
           </div>
