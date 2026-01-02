@@ -3,7 +3,8 @@ import './App.css'
 import Productos from './Productos'
 import Clientes from './Clientes'
 import Pedidos from './Pedidos'
-import Sincronizar from './Sincronizar' // <--- Importar
+import Sincronizar from './Sincronizar'
+import Objetivos from './Objetivos' // <--- IMPORTAR
 
 function App() {
   const [vista, setVista] = useState('menu')
@@ -11,9 +12,10 @@ function App() {
   if (vista === 'productos') return <Productos onVolver={() => setVista('menu')} />
   if (vista === 'clientes') return <Clientes onVolver={() => setVista('menu')} />
   if (vista === 'pedidos') return <Pedidos onVolver={() => setVista('menu')} />
-  
-  // Nueva vista conectada
   if (vista === 'sincronizar') return <Sincronizar onVolver={() => setVista('menu')} />
+  
+  // Nueva vista
+  if (vista === 'objetivos') return <Objetivos onVolver={() => setVista('menu')} />
 
   return (
     <div className="main-container">
@@ -25,15 +27,19 @@ function App() {
           📝 Tomar Pedidos
         </button>
         
+        {/* Nuevo botón insertado aquí para relevancia */}
+        <button className="menu-btn" onClick={() => setVista('objetivos')} style={{ borderLeft: '5px solid #ff9800' }}>
+          🎯 Ver Objetivos
+        </button>
+
         <button className="menu-btn" onClick={() => setVista('clientes')}>
-          👥 Cargar Clientes
+          👥 Clientes
         </button>
         
         <button className="menu-btn" onClick={() => setVista('productos')}>
-          📦 Cargar Productos
+          📦 Productos
         </button>
         
-        {/* Botón activo */}
         <button className="menu-btn sync-btn" onClick={() => setVista('sincronizar')}>
           🔄 Sincronizar
         </button>

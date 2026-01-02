@@ -40,23 +40,24 @@ function Pedidos({ onVolver }) {
       const cRaw = JSON.parse(localStorage.getItem('clientes')) || [];
       const pRaw = JSON.parse(localStorage.getItem('productos')) || [];
 
-      // Normalizamos Productos (según tu Excel)
-      // Dentro del try del useEffect de Pedidos.jsx
-const pMapeados = pRaw.map(p => ({
-  id: p.ID || p.id,
-  nombre: p.nombre || p.Nombre,
-  precio: limpiarPrecio(p.precio), // <--- ACÁ USAMOS LA FUNCIÓN
-  stock: parseInt(p.stock) || 0,
-  categoria: p.categoria || "Sin categoría"
-}));
-// Normalizamos Clientes
+      // Normalizamos Productos
+      const pMapeados = pRaw.map(p => ({
+        id: p.ID || p.id,
+        nombre: p.nombre || p.Nombre,
+        precio: limpiarPrecio(p.precio),
+        stock: parseInt(p.stock) || 0,
+        categoria: p.categoria || "Sin categoría"
+      }));
+
+      // Normalizamos Clientes
       const cMapeados = cRaw.map(c => ({
         id: c.ID || c.id,
         nombre: c.nombre || c.Nombre,
-        // Agregamos esto para leer la nueva columna del Excel
-        telefono: c.telefono || c.Telefono || '', 
+        direccion: c.direccion || '',
+        telefono: c.telefono || c.Telefono || '',
+        lat: c.lat || null, // Aseguramos leer coordenadas
+        lon: c.lon || null
       }));
-
 
       setClientes(cMapeados);
       setProductos(pMapeados);
@@ -66,9 +67,8 @@ const pMapeados = pRaw.map(p => ({
     }
   }, [])
 
-  // --- FILTROS BLINDADOS (CORRECCIÓN AQUÍ) ---
+  // --- FILTROS BLINDADOS ---
   const clientesFiltrados = clientes.filter(c => 
-    // Usamos String() para convertir números a texto y evitar el error
     c.nombre && String(c.nombre).toLowerCase().includes(busquedaCliente.toLowerCase())
   )
 
@@ -79,17 +79,17 @@ const pMapeados = pRaw.map(p => ({
   // --- SELECCIONAR ---
   const seleccionarCliente = (cliente) => {
     setClienteId(cliente.id)
-    setBusquedaCliente(String(cliente.nombre)) // Aseguramos que sea texto
+    setBusquedaCliente(String(cliente.nombre))
     setMostrarSugerenciasClientes(false)
   }
 
   const seleccionarProducto = (producto) => {
     setProductoId(producto.id)
-    setBusquedaProducto(String(producto.nombre)) // Aseguramos que sea texto
+    setBusquedaProducto(String(producto.nombre))
     setMostrarSugerenciasProductos(false)
   }
 
-  // --- AGREGAR ---
+  // --- AGREGAR AL CARRITO ---
   const agregarItem = (e) => {
     e.preventDefault()
     if (!clienteId) return alert('Selecciona un cliente')
@@ -100,7 +100,6 @@ const pMapeados = pRaw.map(p => ({
     
     if (!productoReal) return
 
-    // 1. Forzamos conversión numérica estricta
     const precioFinal = Number(productoReal.precio) || 0;
     const cantidadFinal = parseInt(cantidad) || 1;
     const subtotalFinal = precioFinal * cantidadFinal;
@@ -111,11 +110,8 @@ const pMapeados = pRaw.map(p => ({
       nombre: productoReal.nombre,
       precio: precioFinal,
       cantidad: cantidadFinal,
-      subtotal: subtotalFinal // Acá garantizamos que sea un número
+      subtotal: subtotalFinal
     }
-
-    // Debug para ver en consola si algo falla
-    console.log("Agregando item:", nuevoItem);
 
     setCarrito([...carrito, nuevoItem])
     setProductoId('')
@@ -127,6 +123,7 @@ const pMapeados = pRaw.map(p => ({
     setCarrito(carrito.filter(item => item.id !== id))
   }
 
+  // --- FINALIZAR PEDIDO (Con Lógica GPS) ---
   const finalizarPedido = () => {
     if (carrito.length === 0) return alert('Carrito vacío')
     if (!clienteId) return alert('Falta Cliente')
@@ -137,6 +134,7 @@ const pMapeados = pRaw.map(p => ({
     // Calculamos total
     const totalSafe = carrito.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0);
 
+    // 1. GUARDAR PEDIDO (PRIORIDAD MÁXIMA)
     const nuevoPedido = {
       id: Date.now(),
       fecha: new Date().toLocaleString('es-AR'),
@@ -146,50 +144,94 @@ const pMapeados = pRaw.map(p => ({
       observacion: observacion || '' 
     }
 
-    // Guardar en Historial
     const historial = JSON.parse(localStorage.getItem('pedidos')) || []
     localStorage.setItem('pedidos', JSON.stringify([...historial, nuevoPedido]))
 
-    // --- LÓGICA WHATSAPP INTELIGENTE ---
-    let mensaje = `*NUEVO PEDIDO* 📋\n`;
-    mensaje += `👤 *Cliente:* ${clienteReal.nombre}\n`;
-    mensaje += `📅 *Fecha:* ${new Date().toLocaleDateString('es-AR')}\n`;
-    mensaje += `--------------------------\n`;
-    
-    carrito.forEach(item => {
-      const sub = Number(item.subtotal).toLocaleString('es-AR');
-      mensaje += `▪️ ${item.cantidad} x ${item.nombre} ($ ${sub})\n`;
-    });
-
-    mensaje += `--------------------------\n`;
-    mensaje += `💰 *TOTAL: $ ${totalSafe.toLocaleString('es-AR')}*\n`;
-    if (observacion) mensaje += `📝 *Nota:* ${observacion}`;
-
-    // PREPARAR NÚMERO
-    let telefonoDestino = '';
-    
-    if (clienteReal.telefono) {
-      // Limpieza agresiva: quitamos espacios, guiones y paréntesis
-      let sucio = String(clienteReal.telefono).replace(/\D/g, '');
+    // --- FUNCIÓN INTERNA: ABRIR WHATSAPP Y LIMPIAR ---
+    // Definimos esto aquí para llamarlo tras el GPS o directamente
+    const procesarWhatsAppYLimpiar = () => {
+      let mensaje = `*NUEVO PEDIDO* 📋\n`;
+      mensaje += `👤 *Cliente:* ${clienteReal.nombre}\n`;
+      mensaje += `📅 *Fecha:* ${new Date().toLocaleDateString('es-AR')}\n`;
+      mensaje += `--------------------------\n`;
       
-      // Ajuste "Argentino": Si tiene 10 dígitos (ej: 3644123456), le agregamos el 549 adelante
-      if (sucio.length === 10) {
-        telefonoDestino = '549' + sucio;
-      } else {
-        telefonoDestino = sucio;
+      carrito.forEach(item => {
+        const sub = Number(item.subtotal).toLocaleString('es-AR');
+        mensaje += `▪️ ${item.cantidad} x ${item.nombre} ($ ${sub})\n`;
+      });
+
+      mensaje += `--------------------------\n`;
+      mensaje += `💰 *TOTAL: $ ${totalSafe.toLocaleString('es-AR')}*\n`;
+      if (observacion) mensaje += `📝 *Nota:* ${observacion}`;
+
+      // PREPARAR NÚMERO
+      let telefonoDestino = '';
+      if (clienteReal.telefono) {
+        let sucio = String(clienteReal.telefono).replace(/\D/g, '');
+        if (sucio.length === 10) {
+          telefonoDestino = '549' + sucio;
+        } else {
+          telefonoDestino = sucio;
+        }
+      }
+
+      const urlWhatsApp = `https://wa.me/${telefonoDestino}?text=${encodeURIComponent(mensaje)}`;
+      window.open(urlWhatsApp, '_blank');
+
+      // Limpieza Final
+      setCarrito([])
+      setClienteId('')
+      setBusquedaCliente('')
+      setObservacion('')
+      onVolver() // Opcional: Volver al menú o quedarse para otro pedido
+    };
+
+    // --- 2. LÓGICA DE DETECCIÓN DE GPS ---
+    if (!clienteReal.lat || !clienteReal.lon) {
+      // No tiene GPS -> Preguntamos
+      const deseaAgregar = confirm(`✅ Pedido guardado.\n\n⚠️ ${clienteReal.nombre} NO tiene ubicación GPS.\n¿Desea agregarla ahora para futuras referencias?`);
+
+      if (deseaAgregar) {
+        if (!navigator.geolocation) {
+          alert("GPS no soportado");
+          procesarWhatsAppYLimpiar();
+          return;
+        }
+
+        alert("⏳ Obteniendo ubicación...");
+        
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            // Actualizar Cliente en Memoria y LocalStorage
+            const clienteActualizado = { 
+              ...clienteReal, 
+              lat: position.coords.latitude, 
+              lon: position.coords.longitude 
+            };
+
+            const clientesActualizados = clientes.map(c => 
+              c.id === clienteReal.id ? clienteActualizado : c
+            );
+            
+            setClientes(clientesActualizados); // Actualiza estado
+            localStorage.setItem('clientes', JSON.stringify(clientesActualizados)); // Actualiza DB
+            
+            alert("✅ Ubicación del cliente guardada exitosamente.");
+            procesarWhatsAppYLimpiar();
+          },
+          (error) => {
+            console.error(error);
+            alert("❌ No se pudo capturar el GPS. Abriendo WhatsApp...");
+            procesarWhatsAppYLimpiar();
+          },
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
+        return; // Esperamos al callback del GPS
       }
     }
 
-    // Si tenemos número, va directo. Si no, va vacío (abre lista de contactos)
-    const urlWhatsApp = `https://wa.me/${telefonoDestino}?text=${encodeURIComponent(mensaje)}`;
-    
-    window.open(urlWhatsApp, '_blank');
-
-    // Limpieza
-    setCarrito([])
-    setClienteId('')
-    setBusquedaCliente('')
-    setObservacion('')
+    // Si tiene GPS o dijo que NO -> Vamos directo a WhatsApp
+    procesarWhatsAppYLimpiar();
   }
 
   // --- ESTILOS ---
@@ -219,8 +261,8 @@ const pMapeados = pRaw.map(p => ({
     borderRadius: '8px',
     boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
   }
-// --- CÁLCULOS (Estado Derivado) ---
-  // Calculamos el total aquí afuera para evitar errores visuales
+
+  // --- CÁLCULOS (Estado Derivado) ---
   const totalGeneral = carrito.reduce((acumulador, item) => {
     return acumulador + (Number(item.subtotal) || 0);
   }, 0);
@@ -251,8 +293,9 @@ const pMapeados = pRaw.map(p => ({
           <ul style={dropdownStyle}>
             {clientesFiltrados.length > 0 ? (
               clientesFiltrados.map(c => (
-                <li key={c.id} onClick={() => seleccionarCliente(c)} style={{ padding: '12px', cursor: 'pointer', borderBottom: '1px solid #444', color: 'white' }}>
-                  {c.nombre}
+                <li key={c.id} onClick={() => seleccionarCliente(c)} style={{ padding: '12px', cursor: 'pointer', borderBottom: '1px solid #444', color: 'white', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>{c.nombre}</span>
+                  {c.lat && <span title="Tiene GPS">📍</span>}
                 </li>
               ))
             ) : (
@@ -316,7 +359,7 @@ const pMapeados = pRaw.map(p => ({
             {carrito.map(item => (
               <li key={item.id} style={{ 
                 display: 'flex', 
-                flexDirection: 'column', // Mejor para pantallas móviles pequeñas
+                flexDirection: 'column',
                 padding: '12px 0', 
                 borderBottom: '1px solid #333' 
               }}>
@@ -332,7 +375,6 @@ const pMapeados = pRaw.map(p => ({
                   </button>
                 </div>
                 <div style={{ textAlign: 'right', color: '#888', fontSize: '0.85rem' }}>
-                  {/* Formateamos el subtotal para que se vea como $ 5.300,00 */}
                   Subtotal: ${Number(item.subtotal).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                 </div>
               </li>
@@ -357,8 +399,6 @@ const pMapeados = pRaw.map(p => ({
             </div>
           </div>
         )}
-
-        
 
         {/* --- CAMPO OBSERVACIONES --- */}
         <div style={{ marginTop: '20px' }}>
