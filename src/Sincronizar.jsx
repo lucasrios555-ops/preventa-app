@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import './App.css'
 
 // ⚠️ ASEGÚRATE DE QUE ESTA URL SEA LA DE TU ÚLTIMA IMPLEMENTACIÓN (V3)
-const URL_API = "https://script.google.com/macros/s/AKfycbwiTJVYq5D8GgsGJWYfhdwZiMcWff8bFuDdTOcJvTtzUGN7SgkvSPLzn-UBOqsr-pWb/exec"; 
+const URL_API = "https://script.google.com/macros/s/AKfycbwUbT-ifDje1BBdTKM8sndJvkh11lKYyErgKS6D0aIZ-3dykrKQg1noxdeuRuNRCw19/exec"; 
 
 function Sincronizar({ onVolver }) {
   const [pedidos, setPedidos] = useState([])
@@ -20,6 +20,17 @@ function Sincronizar({ onVolver }) {
     setClientes(listaClientes)
   }, [])
 
+  // --- NUEVO: CÁLCULO DE TOTALES ---
+  const totalPendiente = pedidos.reduce((acc, p) => acc + (Number(p.total) || 0), 0);
+
+  const formatoDinero = (valor) => {
+    return new Intl.NumberFormat('es-AR', {
+      style: 'currency',
+      currency: 'ARS',
+      minimumFractionDigits: 0
+    }).format(valor)
+  }
+  // --------------------------------
 
   // =======================================================
   // 1. BAJAR DATOS (PRODUCTOS, CLIENTES, OBJETIVOS)
@@ -143,7 +154,8 @@ function Sincronizar({ onVolver }) {
       return alert("No hay nada nuevo (ni pedidos ni GPS) para subir.");
     }
 
-    if (!confirm("¿Confirmar SUBIDA TOTAL?\n\n1. Se actualizarán clientes con GPS.\n2. Se enviarán los pedidos pendientes.")) {
+    // --- MODIFICADO: Mensaje con total de dinero ---
+    if (!confirm(`¿Confirmar SUBIDA TOTAL?\n\n💰 MONTO: ${formatoDinero(totalPendiente)}\n📦 PEDIDOS: ${pedidos.length}\n\n1. Se actualizarán clientes con GPS.\n2. Se enviarán los pedidos pendientes.`)) {
       return;
     }
 
@@ -233,6 +245,29 @@ function Sincronizar({ onVolver }) {
       </div>
 
       <div style={{ marginTop: '25px', textAlign: 'left', width: '300px' }}>
+        
+        {/* --- NUEVO: TARJETA DE TOTAL PENDIENTE --- */}
+        <div style={{ 
+            background: '#2e7d32', 
+            padding: '15px', 
+            borderRadius: '8px', 
+            marginBottom: '15px',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.3)',
+            textAlign: 'center',
+            border: '1px solid #4caf50'
+        }}>
+            <span style={{ display: 'block', fontSize: '0.8rem', color: '#a5d6a7', marginBottom: '5px' }}>
+                TOTAL A RENDIR (LOCAL)
+            </span>
+            <span style={{ fontSize: '1.8rem', fontWeight: 'bold', color: 'white' }}>
+                {formatoDinero(totalPendiente)}
+            </span>
+            <div style={{ fontSize: '0.8rem', color: '#c8e6c9', marginTop: '5px' }}>
+                {pedidos.length} pedidos pendientes
+            </div>
+        </div>
+        {/* ------------------------------------------ */}
+
         <h3 style={{color: '#aaa', fontSize: '1rem'}}>Historial Local ({pedidos.length})</h3>
         <ul style={{ maxHeight: '150px', overflowY: 'auto', background: '#222', padding: '10px', borderRadius: '5px', border: '1px solid #444' }}>
           {pedidos.map(p => (

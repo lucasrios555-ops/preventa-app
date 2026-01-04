@@ -1,0 +1,341 @@
+📋 INICIO DE CONTEXTO: PREVENTA APP (REACT + VITE)
+ROL: Ingeniero de Software Senior. PROYECTO: App Web "Offline-First" para preventistas. STACK: React v19, Vite, LocalStorage. BACKEND: Google Apps Script (Google Sheets) como base de datos. NO hay backend Python activo.
+
+ESTADO ACTUAL: La aplicación funciona correctamente. Se han realizado correcciones críticas de estabilidad y lógica de negocio.
+
+ARQUITECTURA:
+
+Sincronizar.jsx: Descarga JSON de Google Sheets (Productos, Clientes) a localStorage. Sube Pedidos y GPS a la nube.
+
+App.jsx: Enrutamiento manual por estados (vista).
+
+Pedidos.jsx: Módulo principal de venta.
+
+ÚLTIMAS IMPLEMENTACIONES (CRÍTICAS - NO TOCAR):
+
+Blindaje de Datos: El useEffect de carga tiene protecciones contra null/undefined y corrige fallos si el localStorage tiene datos corruptos.
+
+Formato de Precio: Se implementó detección inteligente (limpiarPrecio) para diferenciar formatos "11500.0" (PC) de "11.500" (Argentina) y se usa Intl.NumberFormat para mostrar $ 1.200.
+
+Lógica Botón "Sugeridos":
+
+Si Carrito Vacío: Busca productos que contengan "Combo" u "Oferta" en el nombre.
+
+Si Carrito Lleno: Aplica minería de datos buscando IDs en la columna sugerencias del producto padre (Venta cruzada).
+
+CÓDIGO VIGENTE DE Pedidos.jsx (Versión Final Estable): (Si necesitas que modifique algo, usa este código como base de verdad)
+
+JavaScript
+
+import { useState, useEffect } from 'react'
+import './App.css'
+
+// --- CORRECCIÓN DE PRECIO INTELIGENTE ---
+const limpiarPrecio = (valor) => {
+  if (typeof valor === 'number') return valor;
+  if (!valor) return 0;
+  
+  let str = valor.toString();
+
+  // Si termina en punto y decimales (formato PC), parseamos directo
+  if (/\.\d{1,2}$/.test(str)) {
+     return parseFloat(str) || 0;
+  }
+
+  // Si no, asumimos formato argentino (miles con punto), limpiamos
+  const limpio = str
+    .replace(/\$/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.');
+    
+  return parseFloat(limpio) || 0;
+};
+
+// --- HELPER VISUAL: Formato Moneda ARS ---
+const formatoDinero = (valor) => {
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  }).format(valor);
+}
+
+function Pedidos({ onVolver }) {
+  // --- ESTADOS ---
+  const [clientes, setClientes] = useState([])
+  const [productos, setProductos] = useState([])
+
+  const [clienteId, setClienteId] = useState('')
+  const [busquedaCliente, setBusquedaCliente] = useState('')
+  const [mostrarSugerenciasClientes, setMostrarSugerenciasClientes] = useState(false)
+
+  const [productoId, setProductoId] = useState('')
+  const [busquedaProducto, setBusquedaProducto] = useState('')
+  const [mostrarSugerenciasProductos, setMostrarSugerenciasProductos] = useState(false)
+  
+  const [cantidad, setCantidad] = useState(1)
+  const [carrito, setCarrito] = useState([])
+  
+  const [observacion, setObservacion] = useState('')
+
+  // --- MODALES ---
+  const [modalVisible, setModalVisible] = useState(null)
+  const [listaParaMostrar, setListaParaMostrar] = useState([])
+
+  // --- CARGA INICIAL BLINDADA ---
+  useEffect(() => {
+    try {
+      const cRaw = JSON.parse(localStorage.getItem('clientes')) || [];
+      const pRaw = JSON.parse(localStorage.getItem('productos')) || [];
+
+      const safePRaw = Array.isArray(pRaw) ? pRaw : [];
+      const safeCRaw = Array.isArray(cRaw) ? cRaw : [];
+
+      // Procesar Productos
+      const pMapeados = safePRaw.map(p => {
+        if (!p) return null;
+
+        const parsearRelacionados = (valor) => {
+          if (!valor) return []; 
+          if (Array.isArray(valor)) return valor;
+          if (typeof valor === 'number') return [valor];
+          return String(valor).split(',').map(v => v.trim());
+        };
+
+        return {
+          id: p.ID || p.id || Math.random(),
+          nombre: p.nombre || p.Nombre || 'SIN NOMBRE',
+          precio: limpiarPrecio(p.precio),
+          stock: parseInt(p.stock) || 0,
+          categoria: p.categoria || "Sin categoría",
+          sugerencias: parsearRelacionados(p.sugerencias || p.Sugerencias || p.sugerido) 
+        }
+      }).filter(Boolean);
+
+      // Procesar Clientes
+      const cMapeados = safeCRaw.map(c => {
+        if (!c) return null;
+        const parsearIds = (valor) => {
+          if (!valor) return [];
+          if (Array.isArray(valor)) return valor; 
+          return String(valor).split(',').map(v => v.trim()); 
+        };
+        return {
+          id: c.ID || c.id || Math.random(),
+          nombre: c.nombre || c.Nombre || 'SIN NOMBRE',
+          direccion: c.direccion || '',
+          telefono: c.telefono || c.Telefono || '',
+          lat: c.lat || null, 
+          lon: c.lon || null,
+          top10: parsearIds(c.top10)
+        };
+      }).filter(Boolean);
+
+      setClientes(cMapeados);
+      setProductos(pMapeados);
+    } catch (error) {
+      console.error("❌ Error FATAL cargando datos:", error);
+    }
+  }, [])
+
+  // --- FILTROS Y SELECCION ---
+  const clientesFiltrados = clientes.filter(c => 
+    c.nombre && String(c.nombre).toLowerCase().includes(busquedaCliente.toLowerCase())
+  )
+  const productosFiltrados = productos.filter(p => 
+    p.nombre && String(p.nombre).toLowerCase().includes(busquedaProducto.toLowerCase())
+  )
+
+  const seleccionarCliente = (cliente) => {
+    setClienteId(cliente.id)
+    setBusquedaCliente(String(cliente.nombre))
+    setMostrarSugerenciasClientes(false)
+    setModalVisible(null)
+  }
+  const seleccionarProducto = (producto) => {
+    setProductoId(producto.id)
+    setBusquedaProducto(String(producto.nombre))
+    setMostrarSugerenciasProductos(false)
+    setModalVisible(null) 
+  }
+
+  // --- LOGICA INTELIGENTE ---
+  const obtenerProductosDesdeIds = (arrayIds) => {
+    if (!arrayIds || arrayIds.length === 0) return [];
+    return arrayIds.map(id => productos.find(p => String(p.id) === String(id))).filter(Boolean);
+  }
+
+  const abrirTop10 = () => {
+    if (!clienteId) return alert("Selecciona un cliente primero.");
+    const clienteObj = clientes.find(c => String(c.id) === String(clienteId));
+    if (!clienteObj.top10 || clienteObj.top10.length === 0) return alert("☁️ Sin historial.");
+    setListaParaMostrar(obtenerProductosDesdeIds(clienteObj.top10));
+    setModalVisible('top10');
+  }
+
+  const abrirSugerencias = () => {
+    // 1. Carrito Vacío: Ofertas/Combos
+    if (carrito.length === 0) {
+      if (productos.length === 0) return alert("No hay productos.");
+      const ofertas = productos.filter(p => {
+         const n = String(p.nombre).toLowerCase();
+         return n.includes('combo') || n.includes('oferta');
+      });
+      if (ofertas.length === 0) return alert("No hay 'Combo' o 'Oferta' hoy.");
+      setListaParaMostrar(ofertas);
+      setModalVisible('sugeridos');
+      return;
+    }
+    // 2. Venta Cruzada
+    const ultimoItem = carrito[carrito.length - 1];
+    const productoPadre = productos.find(p => String(p.id) === String(ultimoItem.productoId));
+    if (!productoPadre || !productoPadre.sugerencias?.length) return alert(`"${ultimoItem.nombre}" no tiene sugerencias.`);
+    
+    const sugeridos = obtenerProductosDesdeIds(productoPadre.sugerencias);
+    if (sugeridos.length === 0) return alert("Sugerencias no encontradas en lista activa.");
+    
+    setListaParaMostrar(sugeridos);
+    setModalVisible('sugeridos');
+  }
+
+  // --- CARRITO ---
+  const agregarItem = (e) => {
+    if(e) e.preventDefault()
+    if (!clienteId || !productoId) return alert('Faltan datos')
+    
+    const prod = productos.find(p => String(p.id) === String(productoId))
+    if (!prod) return
+
+    const pFinal = Number(prod.precio) || 0;
+    const qFinal = parseInt(cantidad) || 1;
+
+    setCarrito([...carrito, {
+      id: Date.now(),
+      productoId: prod.id,
+      nombre: prod.nombre,
+      precio: pFinal,
+      cantidad: qFinal,
+      subtotal: pFinal * qFinal
+    }])
+    setProductoId(''); setBusquedaProducto(''); setCantidad(1)
+  }
+
+  const eliminarDelCarrito = (id) => setCarrito(carrito.filter(item => item.id !== id))
+
+  const finalizarPedido = () => {
+    if (carrito.length === 0 || !clienteId) return alert('Datos incompletos')
+    const cliente = clientes.find(c => String(c.id) === String(clienteId))
+    const total = carrito.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0);
+
+    const pedido = {
+      id: Date.now(),
+      fecha: new Date().toLocaleString('es-AR'),
+      cliente: cliente.nombre,
+      items: carrito,
+      total: total,
+      observacion: observacion || '' 
+    }
+
+    localStorage.setItem('pedidos', JSON.stringify([...(JSON.parse(localStorage.getItem('pedidos')) || []), pedido]))
+
+    let msg = `*NUEVO PEDIDO* 📋\n👤 *Cliente:* ${cliente.nombre}\n--------------------------\n`;
+    carrito.forEach(i => msg += `▪️ ${i.cantidad} x ${i.nombre} ($ ${Number(i.subtotal).toLocaleString('es-AR')})\n`);
+    msg += `--------------------------\n💰 *TOTAL: ${formatoDinero(total)}*\n`;
+    if (observacion) msg += `📝 *Nota:* ${observacion}`;
+
+    let tel = cliente.telefono ? String(cliente.telefono).replace(/\D/g, '') : '';
+    if(tel.length === 10) tel = '549' + tel;
+    
+    window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, '_blank');
+    
+    // Aquí iría lógica GPS (omitida por brevedad en resumen, pero existe en tu código)
+    
+    setCarrito([]); setClienteId(''); setBusquedaProducto(''); setObservacion('');
+    onVolver() 
+  }
+
+  // --- RENDER ---
+  const inputStyle = { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #555', background: '#222', color: 'white', outline: 'none', fontSize: '1rem' }
+  const dropdownStyle = { position: 'absolute', zIndex: 100, background: '#333', width: '100%', maxHeight: '200px', overflowY: 'auto', border: '1px solid #555', listStyle: 'none', padding: 0, marginTop: '5px' }
+  const totalGeneral = carrito.reduce((acc, item) => acc + (Number(item.subtotal) || 0), 0);
+
+  return (
+    <div className="main-container">
+      <h2>📝 Nuevo Pedido</h2>
+      {/* SECCION CLIENTE */}
+      <div style={{ width: '100%', maxWidth: '350px', marginBottom: '15px', position: 'relative' }}>
+        <input type="text" placeholder="🔍 Buscar cliente..." value={busquedaCliente} onChange={(e) => { setBusquedaCliente(e.target.value); setMostrarSugerenciasClientes(true); setClienteId('') }} style={inputStyle} />
+        {mostrarSugerenciasClientes && busquedaCliente && (
+          <ul style={dropdownStyle}>
+            {clientesFiltrados.map(c => (
+              <li key={c.id} onClick={() => seleccionarCliente(c)} style={{ padding: '12px', borderBottom: '1px solid #444', color: 'white' }}>{c.nombre} {c.lat && '📍'}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* BOTONES */}
+      <div style={{ width: '100%', maxWidth: '350px', display: 'flex', gap: '10px', marginBottom: '20px' }}>
+         <button onClick={abrirTop10} disabled={!clienteId} style={{ flex: 1, padding: '8px', background: clienteId ? '#ff9800' : '#444', color: 'white' }}>⭐ Top 10</button>
+         <button onClick={abrirSugerencias} style={{ flex: 1, padding: '8px', background: '#9c27b0', color: 'white' }}>💡 Sugeridos</button>
+      </div>
+
+      {/* MODAL */}
+      {modalVisible && (
+        <div style={{ width: '100%', maxWidth: '350px', marginBottom: '20px', background: '#2a2a2a', padding: '10px', borderRadius: '8px', border: '1px solid #555' }}>
+          <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '10px'}}>
+             <span style={{fontWeight: 'bold', color: '#e040fb'}}>
+                {modalVisible === 'top10' ? '🏆 Histórico' : carrito.length > 0 ? `💡 Combinan con ${carrito[carrito.length - 1].nombre}` : '🔥 Ofertas & Combos'}
+             </span>
+             <button onClick={() => setModalVisible(null)} style={{background:'transparent', border:'none', color:'#aaa'}}>✖</button>
+          </div>
+          <ul style={{listStyle: 'none', padding: 0, margin: 0, maxHeight: '200px', overflowY: 'auto'}}>
+            {listaParaMostrar.map(p => (
+              <li key={p.id} onClick={() => seleccionarProducto(p)} style={{ padding: '8px', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between' }}>
+                <span>{p.nombre}</span><span style={{color: '#4caf50'}}>{formatoDinero(p.precio)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* PRODUCTO Y CARRITO (Omitido detalle fino por resumen, usar código completo si se requiere) */}
+      <div style={{ width: '100%', maxWidth: '350px', marginBottom: '30px' }}>
+         {/* Inputs de producto y Botón Agregar... */}
+         {/* ... (Lógica idéntica al código anterior) ... */}
+         <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{flex: 1, position: 'relative'}}>
+                <input type="text" placeholder="🔍 Buscar producto..." value={busquedaProducto} onChange={(e) => { setBusquedaProducto(e.target.value); setMostrarSugerenciasProductos(true); setProductoId('') }} style={inputStyle} />
+                {mostrarSugerenciasProductos && busquedaProducto && (
+                  <ul style={dropdownStyle}>
+                    {productosFiltrados.map(p => (
+                      <li key={p.id} onClick={() => seleccionarProducto(p)} style={{ padding: '12px', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+                        <span>{p.nombre}</span><span style={{ color: '#4caf50' }}>{formatoDinero(p.precio)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+            </div>
+            <input type="number" min="1" value={cantidad} onChange={(e) => setCantidad(e.target.value)} style={{ ...inputStyle, width: '70px', textAlign: 'center' }} />
+         </div>
+         <button onClick={agregarItem} style={{ width: '100%', marginTop: '10px', padding: '12px', background: '#2196f3', color: 'white', fontWeight: 'bold' }}>+ AGREGAR</button>
+      </div>
+
+      {/* LISTA CARRITO */}
+      <div style={{ width: '100%', maxWidth: '350px', borderTop: '1px solid #444', paddingTop: '20px' }}>
+         {carrito.map(item => (
+            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #333' }}>
+               <span><b style={{color:'#2196f3'}}>{item.cantidad}</b> x {item.nombre}</span>
+               <span>{formatoDinero(item.subtotal)} <button onClick={() => eliminarDelCarrito(item.id)} style={{color:'#ff5252', background:'none', border:'none'}}>✕</button></span>
+            </div>
+         ))}
+         {carrito.length > 0 && <h3 style={{color: '#4caf50', textAlign: 'right'}}>Total: {formatoDinero(totalGeneral)}</h3>}
+         <button onClick={finalizarPedido} style={{ width: '100%', marginTop: '20px', padding: '15px', background: '#4caf50', color: 'white', fontWeight: 'bold' }}>✅ FINALIZAR PEDIDO</button>
+      </div>
+      <button onClick={onVolver} style={{ marginTop: '30px', background: 'transparent', border: '1px solid #666', color: '#aaa', padding: '10px 20px', borderRadius: '20px' }}>⬅ Volver</button>
+    </div>
+  )
+}
+export default Pedidos
+FIN DEL CONTEXTO
