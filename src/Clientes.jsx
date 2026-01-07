@@ -8,6 +8,8 @@ function Clientes({ onVolver }) {
   // Formulario
   const [nombre, setNombre] = useState('')
   const [direccion, setDireccion] = useState('')
+  const [telefono, setTelefono] = useState('') // <--- NUEVO CAMPO
+  
   // --- ESTADOS PARA GPS ---
   const [lat, setLat] = useState('')
   const [lon, setLon] = useState('')
@@ -70,6 +72,7 @@ function Clientes({ onVolver }) {
 
     const clienteObj = {
       nombre: String(nombre).toUpperCase(),
+      telefono, // <--- GUARDAMOS TELEFONO
       direccion,
       lat,  
       lon   
@@ -98,6 +101,7 @@ function Clientes({ onVolver }) {
 
   const cargarParaEditar = (cliente) => {
     setNombre(cliente.nombre)
+    setTelefono(cliente.telefono || '') // <--- CARGAR TELEFONO
     setDireccion(cliente.direccion || '')
     setLat(cliente.lat || '')
     setLon(cliente.lon || '')
@@ -118,6 +122,7 @@ function Clientes({ onVolver }) {
 
   const limpiarForm = () => {
     setNombre('')
+    setTelefono('') // <--- LIMPIAR TELEFONO
     setDireccion('')
     setLat('')
     setLon('')
@@ -167,10 +172,19 @@ function Clientes({ onVolver }) {
             style={inputStyle}
             autoComplete="off"
           />
+
+          {/* --- INPUT TELEFONO --- */}
+          <input 
+            type="tel" 
+            placeholder="📞 Teléfono (ej: 3644123456)" 
+            value={telefono} 
+            onChange={(e) => setTelefono(e.target.value)}
+            style={inputStyle}
+          />
           
           <input 
             type="text" 
-            placeholder="Dirección" 
+            placeholder="🏠 Dirección" 
             value={direccion} 
             onChange={(e) => setDireccion(e.target.value)}
             style={inputStyle}
@@ -243,6 +257,8 @@ function Clientes({ onVolver }) {
             }}>
               <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '65%' }}>
                 <span style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>{cliente.nombre}</span>
+                {/* --- MOSTRAR TELEFONO EN LISTA --- */}
+                {cliente.telefono && <span style={{ color: '#4caf50', fontSize: '0.8rem' }}>📞 {cliente.telefono}</span>}
                 <span style={{ color: '#bbb', fontSize: '0.85rem' }}>{cliente.direccion}</span>
                 {cliente.lat && <span style={{ color: '#64b5f6', fontSize: '0.75rem', marginTop: '2px' }}>📍 GPS OK</span>}
               </div>

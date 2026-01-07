@@ -201,6 +201,17 @@ function Sincronizar({ onVolver }) {
     setLoading(false)
   }
 
+  // =======================================================
+  // 4. NUEVA FUNCIONALIDAD: ELIMINAR PEDIDO LOCAL
+  // =======================================================
+  const eliminarPedidoLocal = (id) => {
+    if (confirm('¿Estás seguro de ELIMINAR este pedido del historial local? Esta acción no se puede deshacer.')) {
+        const nuevosPedidos = pedidos.filter(p => p.id !== id);
+        setPedidos(nuevosPedidos);
+        localStorage.setItem('pedidos', JSON.stringify(nuevosPedidos));
+    }
+  }
+
 
   return (
     <div className="main-container">
@@ -269,14 +280,41 @@ function Sincronizar({ onVolver }) {
         {/* ------------------------------------------ */}
 
         <h3 style={{color: '#aaa', fontSize: '1rem'}}>Historial Local ({pedidos.length})</h3>
-        <ul style={{ maxHeight: '150px', overflowY: 'auto', background: '#222', padding: '10px', borderRadius: '5px', border: '1px solid #444' }}>
+        <ul style={{ maxHeight: '200px', overflowY: 'auto', background: '#222', padding: '10px', borderRadius: '5px', border: '1px solid #444' }}>
           {pedidos.map(p => (
-            <li key={p.id} style={{ color: 'white', borderBottom: '1px solid #333', marginBottom: '5px', paddingBottom: '5px' }}>
-              <div style={{fontWeight: 'bold'}}>{p.cliente}</div>
-              <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem'}}>
-                <span>Total: ${p.total}</span>
-                <span style={{color: '#aaa'}}>{p.fecha.split(',')[0]}</span>
+            <li key={p.id} style={{ 
+                color: 'white', 
+                borderBottom: '1px solid #333', 
+                marginBottom: '5px', 
+                paddingBottom: '5px',
+                display: 'flex',               // <--- FLEX PARA ALINEAR BOTÓN
+                justifyContent: 'space-between', 
+                alignItems: 'center' 
+            }}>
+              {/* DATOS DEL PEDIDO A LA IZQUIERDA */}
+              <div style={{flex: 1}}> 
+                  <div style={{fontWeight: 'bold'}}>{p.cliente}</div>
+                  <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginRight: '10px'}}>
+                    <span>Total: ${p.total}</span>
+                    <span style={{color: '#aaa'}}>{p.fecha.split(',')[0]}</span>
+                  </div>
               </div>
+
+              {/* BOTÓN ELIMINAR A LA DERECHA */}
+              <button 
+                onClick={() => eliminarPedidoLocal(p.id)}
+                style={{
+                    background: 'transparent',
+                    border: 'none',
+                    fontSize: '1.2rem',
+                    cursor: 'pointer',
+                    padding: '0 5px',
+                    color: '#ff5252'
+                }}
+                title="Eliminar pedido"
+              >
+                🗑️
+              </button>
             </li>
           ))}
           {pedidos.length === 0 && <li style={{color: '#666', textAlign: 'center'}}>No hay pedidos pendientes</li>}

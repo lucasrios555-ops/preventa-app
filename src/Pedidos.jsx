@@ -121,6 +121,22 @@ function Pedidos({ onVolver }) {
     }
   }, [])
 
+// --- NUEVO: PREVENIR RECARGA ACCIDENTAL ---
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      // Solo activamos la alerta si hay cosas en el carrito
+      if (carrito.length > 0) {
+        e.preventDefault();
+        e.returnValue = ''; // Requerido por Chrome/navegadores modernos
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [carrito]); // Se re-ejecuta si cambia el carrito  
   
 
   // --- FILTROS ---

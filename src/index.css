@@ -13,6 +13,11 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* AGREGAR ESTO A HTML Y BODY */
+html, body {
+  overscroll-behavior-y: none; /* 🚫 Bloquea el pull-to-refresh nativo */
+}
+
 a {
   font-weight: 500;
   color: #646cff;
