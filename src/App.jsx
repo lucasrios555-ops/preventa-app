@@ -5,6 +5,7 @@ import Clientes from './Clientes'
 import Pedidos from './Pedidos'
 import Sincronizar from './Sincronizar'
 import Objetivos from './Objetivos' // <--- IMPORTAR
+import Compras from './Compras'
 
 function App() {
   const [vista, setVista] = useState('menu')
@@ -16,6 +17,7 @@ function App() {
   
   // Nueva vista
   if (vista === 'objetivos') return <Objetivos onVolver={() => setVista('menu')} />
+  if (vista === 'compras') return <Compras onVolver={() => setVista('menu')} />
 
   return (
     <div className="main-container">
@@ -43,6 +45,14 @@ function App() {
         <button className="menu-btn sync-btn" onClick={() => setVista('sincronizar')}>
           🔄 Sincronizar
         </button>
+
+        <button 
+          className="menu-btn" 
+          onClick={() => setVista('compras')} 
+          style={{ borderLeft: '5px solid #e91e63' }}>
+          🛒 Modo Compras
+       </button>
+
       </div>
     </div>
   )
