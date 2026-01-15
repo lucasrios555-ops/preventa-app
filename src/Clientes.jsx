@@ -5,11 +5,15 @@ function Clientes({ onVolver }) {
   // Datos
   const [listaClientes, setListaClientes] = useState([])
   
-  // Formulario
+  // Formulario (Nuevo/Editar)
   const [nombre, setNombre] = useState('')
   const [direccion, setDireccion] = useState('')
-  const [telefono, setTelefono] = useState('') // <--- NUEVO CAMPO
-  
+  const [telefono, setTelefono] = useState('')
+  const [listaPrecios, setListaPrecios] = useState('General') 
+
+  // Filtro de Búsqueda (Separado del formulario)
+  const [filtroNombre, setFiltroNombre] = useState('') 
+
   // --- ESTADOS PARA GPS ---
   const [lat, setLat] = useState('')
   const [lon, setLon] = useState('')
@@ -31,255 +35,226 @@ function Clientes({ onVolver }) {
 
   // --- LOGICA FILTRO ---
   const clientesFiltrados = listaClientes.filter(c => 
-    c.nombre && String(c.nombre).toLowerCase().includes(nombre.toLowerCase())
+    c.nombre && String(c.nombre).toLowerCase().includes(filtroNombre.toLowerCase())
   )
 
   // --- CAPTURAR GPS ---
   const capturarUbicacion = (e) => {
     e.preventDefault() 
+    if (!navigator.geolocation) return alert("GPS no soportado")
     
-    if (!navigator.geolocation) {
-      setGpsStatus('❌ GPS no soportado en este dispositivo')
-      return
-    }
-
-    setGpsStatus('⏳ Obteniendo satélites...')
-
+    setGpsStatus('Buscando señal...')
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        // ÉXITO
-        setLat(position.coords.latitude)
-        setLon(position.coords.longitude)
-        setGpsStatus('✅ Ubicación capturada')
+      (pos) => {
+        setLat(pos.coords.latitude)
+        setLon(pos.coords.longitude)
+        setGpsStatus('✅ GPS OK')
       },
-      (error) => {
-        // ERROR
-        console.error(error)
-        let msg = '❌ Error GPS'
-        if (error.code === 1) msg = '❌ Permiso denegado'
-        if (error.code === 2) msg = '❌ Señal no disponible'
-        if (error.code === 3) msg = '❌ Tiempo de espera agotado'
-        setGpsStatus(msg)
+      (err) => {
+        console.error(err)
+        setGpsStatus('❌ Error GPS')
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: true }
     )
   }
 
-  // --- LOGICA GUARDAR ---
+  // --- GUARDAR / EDITAR ---
   const handleGuardar = (e) => {
     e.preventDefault()
-    if (!nombre) return alert('El nombre es obligatorio')
+    if (!nombre.trim()) return alert("El nombre es obligatorio")
 
-    const clienteObj = {
-      nombre: String(nombre).toUpperCase(),
-      telefono, // <--- GUARDAMOS TELEFONO
-      direccion,
-      lat,  
-      lon   
+    const nuevoCliente = {
+      id: idEdicion || Date.now(),
+      nombre: nombre.toUpperCase(),
+      direccion: direccion || '',
+      telefono: telefono || '',
+      lista: listaPrecios, 
+      lat: lat || null,
+      lon: lon || null,
+      top10: idEdicion ? (listaClientes.find(c => c.id === idEdicion)?.top10 || []) : []
     }
 
+    let nuevaLista;
     if (idEdicion) {
-      // EDITAR
-      const actualizados = listaClientes.map(c => 
-        c.id === idEdicion ? { ...c, ...clienteObj } : c
-      )
-      setListaClientes(actualizados)
-      localStorage.setItem('clientes', JSON.stringify(actualizados))
-      alert('✅ Cliente actualizado')
+      nuevaLista = listaClientes.map(c => c.id === idEdicion ? nuevoCliente : c)
+      alert("Cliente actualizado correctamente.")
     } else {
-      // NUEVO
-      const nuevo = { id: Date.now(), ...clienteObj }
-      const nuevaLista = [...listaClientes, nuevo]
-      setListaClientes(nuevaLista)
-      localStorage.setItem('clientes', JSON.stringify(nuevaLista))
-      alert('✅ Cliente creado')
+      nuevaLista = [...listaClientes, nuevoCliente]
+      alert("Cliente creado correctamente.")
     }
 
-    // Limpiar form
-    limpiarForm()
+    setListaClientes(nuevaLista)
+    localStorage.setItem('clientes', JSON.stringify(nuevaLista))
+    limpiarFormulario()
   }
 
   const cargarParaEditar = (cliente) => {
-    setNombre(cliente.nombre)
-    setTelefono(cliente.telefono || '') // <--- CARGAR TELEFONO
-    setDireccion(cliente.direccion || '')
-    setLat(cliente.lat || '')
-    setLon(cliente.lon || '')
-    setGpsStatus(cliente.lat ? '✅ Ubicación guardada previamente' : '')
     setIdEdicion(cliente.id)
-    // Enfocar input
-    document.querySelector('input[name="nombreCliente"]')?.focus()
+    setNombre(cliente.nombre)
+    setDireccion(cliente.direccion)
+    setTelefono(cliente.telefono)
+    setLat(cliente.lat)
+    setLon(cliente.lon)
+    setGpsStatus(cliente.lat ? '✅ GPS Registrado' : '')
+    
+    if (cliente.lista && String(cliente.lista).toLowerCase().includes('may')) {
+        setListaPrecios('Mayorista');
+    } else {
+        setListaPrecios('General');
+    }
+    setFiltroNombre('') 
   }
 
   const borrarCliente = (id) => {
-    if (confirm('¿Seguro borrar este cliente?')) {
-      const nuevaLista = listaClientes.filter(c => c.id !== id)
-      setListaClientes(nuevaLista)
-      localStorage.setItem('clientes', JSON.stringify(nuevaLista))
-      if (id === idEdicion) limpiarForm()
-    }
+    if (!confirm("¿Seguro de borrar este cliente?")) return
+    const filtrada = listaClientes.filter(c => c.id !== id)
+    setListaClientes(filtrada)
+    localStorage.setItem('clientes', JSON.stringify(filtrada))
   }
 
-  const limpiarForm = () => {
+  const limpiarFormulario = () => {
+    setIdEdicion(null)
     setNombre('')
-    setTelefono('') // <--- LIMPIAR TELEFONO
     setDireccion('')
+    setTelefono('')
     setLat('')
     setLon('')
     setGpsStatus('')
-    setIdEdicion(null)
+    setListaPrecios('General')
   }
 
-  // Estilos auxiliares
   const inputStyle = {
-    padding: '10px', 
-    borderRadius: '8px', 
+    width: '100%',
+    padding: '10px',
+    marginBottom: '8px',
+    borderRadius: '6px',
     border: '1px solid #555',
     background: '#222',
     color: 'white',
-    width: '100%',
-    boxSizing: 'border-box'
+    fontSize: '0.9rem'
   }
 
+  // --- RENDER ---
   return (
-    // 1. Contenedor principal con altura fija y sin scroll global
-    <div className="main-container" style={{ height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+    <div className="main-container" style={{ 
+        height: '100vh', // Ocupa toda la altura de la pantalla
+        display: 'flex', 
+        flexDirection: 'column', 
+        justifyContent: 'flex-start',
+        overflow: 'hidden', // Evita scroll general
+        padding: '10px',
+        boxSizing: 'border-box'
+    }}>
       
-      {/* 2. CABECERA Y FORMULARIO (FIJO ARRIBA) */}
-      <div style={{ width: '100%', maxWidth: '350px', flexShrink: 0, paddingBottom: '10px' }}>
-        <h2 style={{ textAlign: 'center', margin: '10px 0' }}>👥 Gestión de Clientes</h2>
+      <h2 style={{margin: '0 0 10px 0', fontSize:'1.5rem'}}>👥 Gestión Clientes</h2>
+      
+      {/* 1. SECCIÓN FIJA SUPERIOR (FORMULARIO) */}
+      <div style={{ 
+          flexShrink: 0, // No se encoge
+          background: '#1e1e1e', 
+          padding: '10px', 
+          borderRadius: '8px', 
+          width: '100%', 
+          maxWidth: '350px', 
+          border: '1px solid #333',
+          marginBottom: '10px'
+      }}>
+        <h3 style={{ margin: '0 0 10px 0', color: '#4caf50', fontSize:'1rem' }}>
+            {idEdicion ? '✏️ Editar Cliente' : '➕ Nuevo Cliente'}
+        </h3>
         
-        <form onSubmit={handleGuardar} style={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          gap: '10px',
-          background: '#1e1e1e',
-          padding: '15px',
-          borderRadius: '12px',
-          boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-          border: idEdicion ? '1px solid #ff9800' : '1px solid #333'
-        }}>
-          <label style={{ color: '#aaa', fontSize: '0.8rem', fontWeight: 'bold' }}>
-            {idEdicion ? 'EDITANDO CLIENTE:' : 'NUEVO CLIENTE / BUSCAR:'}
-          </label>
-
-          <input 
-            name="nombreCliente"
-            type="text" 
-            placeholder="Nombre / Negocio" 
-            value={nombre} 
-            onChange={(e) => setNombre(e.target.value)}
-            style={inputStyle}
-            autoComplete="off"
-          />
-
-          {/* --- INPUT TELEFONO --- */}
-          <input 
-            type="tel" 
-            placeholder="📞 Teléfono (ej: 3644123456)" 
-            value={telefono} 
-            onChange={(e) => setTelefono(e.target.value)}
-            style={inputStyle}
-          />
-          
-          <input 
-            type="text" 
-            placeholder="🏠 Dirección" 
-            value={direccion} 
-            onChange={(e) => setDireccion(e.target.value)}
-            style={inputStyle}
-          />
-
-          {/* --- SECCIÓN GPS --- */}
-          <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-            <button 
-              type="button" 
-              onClick={capturarUbicacion}
-              style={{ 
-                background: '#2196f3', 
-                color: 'white', 
-                border: 'none', 
-                padding: '8px', 
-                borderRadius: '5px',
-                cursor: 'pointer',
-                flex: 1,
-                fontSize: '0.9rem'
-              }}
-            >
-              📍 Capturar GPS
-            </button>
-            
-            {(lat || lon) && (
-              <div style={{ fontSize: '0.7rem', color: '#aaa', marginLeft: '5px', lineHeight: '1.1' }}>
-                Lat: {parseFloat(lat).toFixed(4)}<br/>
-                Lon: {parseFloat(lon).toFixed(4)}
-              </div>
-            )}
+        <form onSubmit={handleGuardar}>
+          <div style={{display:'flex', gap:'5px'}}>
+              <input type="text" placeholder="Nombre" value={nombre} onChange={e => setNombre(e.target.value)} style={inputStyle} />
+              <input type="text" placeholder="Dirección" value={direccion} onChange={e => setDireccion(e.target.value)} style={inputStyle} />
+          </div>
+          <div style={{display:'flex', gap:'5px'}}>
+              <input type="tel" placeholder="Teléfono" value={telefono} onChange={e => setTelefono(e.target.value)} style={inputStyle} />
+              <select value={listaPrecios} onChange={e => setListaPrecios(e.target.value)} style={{...inputStyle, background: '#333', cursor:'pointer'}}>
+                <option value="General">🛒 General</option>
+                <option value="Mayorista">🏭 Mayorista</option>
+              </select>
           </div>
           
-          {gpsStatus && <p style={{ margin: 0, fontSize: '0.8rem', color: gpsStatus.includes('✅') ? '#4caf50' : 'orange' }}>{gpsStatus}</p>}
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '8px' }}>
+            <button type="button" onClick={capturarUbicacion} style={{ background: '#2196f3', fontSize: '0.8rem', padding: '6px' }}>📍 GPS</button>
+            <span style={{ fontSize: '0.7rem', color: lat ? '#4caf50' : '#888' }}>{gpsStatus || 'Sin GPS'}</span>
+          </div>
 
-          {/* Botones Acción */}
-          <div style={{ display: 'flex', gap: '10px', marginTop: '5px' }}>
-            <button type="submit" style={{ flex: 1, padding: '10px', background: idEdicion ? '#ff9800' : '#4caf50', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>
-              {idEdicion ? '💾 Actualizar' : '➕ Crear'}
-            </button>
-            
-            {idEdicion && (
-              <button type="button" onClick={limpiarForm} style={{ padding: '10px', background: '#9e9e9e', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
-                Cancelar
-              </button>
-            )}
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button type="submit" style={{ flex: 1, background: '#4caf50', padding:'8px' }}>{idEdicion ? 'Actualizar' : 'Guardar'}</button>
+            {idEdicion && <button type="button" onClick={limpiarFormulario} style={{ background: '#666', padding:'8px' }}>Cancelar</button>}
           </div>
         </form>
       </div>
 
-      {/* 3. LISTA SCROLLEABLE (OCUPA EL ESPACIO CENTRAL) */}
-      <div style={{ flex: 1, width: '100%', maxWidth: '350px', overflowY: 'auto', paddingRight: '5px', marginTop: '10px' }}>
-        
-        <h3 style={{ textAlign: 'left', margin: '0 0 10px 0', fontSize: '1rem', color: '#ddd' }}>
-          Lista Local ({clientesFiltrados.length})
-        </h3>
-        
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+      {/* 2. SECCIÓN CENTRAL (LISTA CON SCROLL) */}
+      {/* Esta sección ocupará todo el espacio disponible (flex: 1) y tendrá scroll interno */}
+      <div style={{ 
+          flex: 1, // Toma el espacio restante
+          overflowY: 'auto', // Scroll interno solo aquí
+          width: '100%', 
+          maxWidth: '350px',
+          borderTop: '1px solid #333',
+          borderBottom: '1px solid #333',
+          marginBottom: '10px',
+          paddingRight: '5px' // Espacio para el scrollbar
+      }}>
+         {!idEdicion && (
+             <div style={{position: 'sticky', top: 0, background: '#242424', paddingTop: '5px', paddingBottom:'5px', zIndex: 10}}>
+                <input 
+                  type="text" 
+                  placeholder="🔍 Buscar cliente..." 
+                  value={filtroNombre} 
+                  onChange={e => setFiltroNombre(e.target.value)}
+                  style={{...inputStyle, margin: 0, border:'1px solid #666'}}
+                />
+             </div>
+         )}
+
+        <ul style={{ listStyle: 'none', padding: 0, marginTop: '5px' }}>
           {clientesFiltrados.map(cliente => (
             <li key={cliente.id} style={{ 
-              background: idEdicion === cliente.id ? '#3e2723' : '#333', 
+              background: '#2a2a2a', 
               marginBottom: '8px', 
-              padding: '12px', 
-              borderRadius: '8px',
-              display: 'flex',
-              justifyContent: 'space-between',
+              padding: '10px', 
+              borderRadius: '6px', 
+              display: 'flex', 
+              justifyContent: 'space-between', 
               alignItems: 'center',
-              color: 'white',
-              borderLeft: idEdicion === cliente.id ? '4px solid #ff9800' : '4px solid transparent',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+              borderLeft: cliente.lista && String(cliente.lista).toLowerCase().includes('may') ? '4px solid #e91e63' : '4px solid #4caf50'
             }}>
-              <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '65%' }}>
-                <span style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>{cliente.nombre}</span>
-                {/* --- MOSTRAR TELEFONO EN LISTA --- */}
-                {cliente.telefono && <span style={{ color: '#4caf50', fontSize: '0.8rem' }}>📞 {cliente.telefono}</span>}
-                <span style={{ color: '#bbb', fontSize: '0.85rem' }}>{cliente.direccion}</span>
-                {cliente.lat && <span style={{ color: '#64b5f6', fontSize: '0.75rem', marginTop: '2px' }}>📍 GPS OK</span>}
+              <div style={{flex: 1}}>
+                <div style={{ fontWeight: 'bold', fontSize: '0.95rem', color: 'white' }}>{cliente.nombre}</div>
+                
+                <div style={{marginTop: '2px', marginBottom: '2px'}}>
+                   {cliente.lista && String(cliente.lista).toLowerCase().includes('may') 
+                     ? <span style={{fontSize:'0.65rem', background:'#e91e63', color:'white', padding:'1px 5px', borderRadius:'3px'}}>MAYORISTA</span>
+                     : <span style={{fontSize:'0.65rem', background:'#333', color:'#aaa', padding:'1px 5px', borderRadius:'3px', border:'1px solid #444'}}>GENERAL</span>
+                   }
+                </div>
+                
+                {cliente.telefono && <span style={{ color: '#4caf50', fontSize: '0.75rem', display:'block' }}>📞 {cliente.telefono}</span>}
+                <span style={{ color: '#bbb', fontSize: '0.8rem' }}>{cliente.direccion}</span>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={() => cargarParaEditar(cliente)} style={{ fontSize: '1.2rem', background: 'transparent', border: 'none', cursor: 'pointer' }} title="Editar">✏️</button>
-                <button onClick={() => borrarCliente(cliente.id)} style={{ fontSize: '1.2rem', background: 'transparent', border: 'none', cursor: 'pointer' }} title="Borrar">🗑</button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => cargarParaEditar(cliente)} style={{ fontSize: '1.1rem', background: 'transparent', border: 'none', cursor: 'pointer', padding:'2px' }} title="Editar">✏️</button>
+                <button onClick={() => borrarCliente(cliente.id)} style={{ fontSize: '1.1rem', background: 'transparent', border: 'none', cursor: 'pointer', padding:'2px' }} title="Borrar">🗑</button>
               </div>
             </li>
           ))}
         </ul>
         
-        {clientesFiltrados.length === 0 && !nombre && (
-          <p style={{ textAlign: 'center', color: '#666', marginTop: '30px' }}>No hay clientes cargados.</p>
+        {clientesFiltrados.length === 0 && (
+          <p style={{ textAlign: 'center', color: '#666', marginTop: '20px' }}>Sin resultados.</p>
         )}
       </div>
 
-      {/* 4. BOTÓN VOLVER (FIJO ABAJO) */}
-      <div style={{ padding: '15px 0', width: '100%', maxWidth: '350px', flexShrink: 0 }}>
-        <button onClick={onVolver} style={{ padding: '12px', background: 'transparent', border: '1px solid #666', color: '#aaa', width: '100%', borderRadius: '25px', cursor: 'pointer' }}>
-          ⬅️ Volver al Menú
+      {/* 3. SECCIÓN FIJA INFERIOR (BOTÓN VOLVER) */}
+      <div style={{ flexShrink: 0, width: '100%', maxWidth: '350px' }}>
+        <button onClick={onVolver} style={{ background: '#333', border: '1px solid #555', color: '#ddd', borderRadius: '8px', width: '100%', padding:'12px', fontWeight:'bold' }}>
+          ⬅ Volver al Menú
         </button>
       </div>
     </div>

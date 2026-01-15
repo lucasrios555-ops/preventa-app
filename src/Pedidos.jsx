@@ -9,13 +9,11 @@ const limpiarPrecio = (valor) => {
   let str = valor.toString();
 
   // DETECCIÓN INTELIGENTE:
-  // Si el texto termina en punto y 1 o 2 dígitos (ej: "11500.0" o "10.5"), 
-  // asumimos que es formato decimal de computadora. NO borramos ese punto.
   if (/\.\d{1,2}$/.test(str)) {
      return parseFloat(str) || 0;
   }
 
-  // Si no, asumimos formato argentino (ej: "11.500"), borramos el punto de miles.
+  // Si no, asumimos formato argentino
   const limpio = str
     .replace(/\$/g, '')
     .replace(/\./g, '')
@@ -44,6 +42,14 @@ function Pedidos({ onVolver }) {
   const [busquedaCliente, setBusquedaCliente] = useState('')
   const [mostrarSugerenciasClientes, setMostrarSugerenciasClientes] = useState(false)
 
+  // --- NUEVO ESTADO: LISTA DE PRECIOS ---
+  const [tipoPrecio, setTipoPrecio] = useState('general') // 'general' | 'mayorista'
+  // --------------------------------------
+
+  // --- NUEVO ESTADO UI: ACORDEÓN ---
+  const [verOpciones, setVerOpciones] = useState(false)
+  // ---------------------------------
+
   const [productoId, setProductoId] = useState('')
   const [busquedaProducto, setBusquedaProducto] = useState('')
   const [mostrarSugerenciasProductos, setMostrarSugerenciasProductos] = useState(false)
@@ -58,21 +64,20 @@ function Pedidos({ onVolver }) {
   const [listaParaMostrar, setListaParaMostrar] = useState([])
   // ----------------------------------------------------
 
-  // --- CARGA INICIAL ---
-  // --- CARGA INICIAL (CORREGIDA Y BLINDADA) ---
+  // --- CARGA INICIAL (CORREGIDA Y BLINDADA + RECUPERAR BORRADOR) ---
   useEffect(() => {
     try {
       // 1. Cargar datos crudos con fallback a array vacío
       const cRaw = JSON.parse(localStorage.getItem('clientes')) || [];
       const pRaw = JSON.parse(localStorage.getItem('productos')) || [];
 
-      // PROTECCIÓN: Si por alguna razón no son arrays, forzamos arrays vacíos para evitar error en .map
+      // PROTECCIÓN: Si por alguna razón no son arrays, forzamos arrays vacíos
       const safePRaw = Array.isArray(pRaw) ? pRaw : [];
       const safeCRaw = Array.isArray(cRaw) ? cRaw : [];
 
       // 2. Procesar Productos
       const pMapeados = safePRaw.map(p => {
-        if (!p) return null; // <--- ESCUDO: Si la fila está vacía, la ignoramos.
+        if (!p) return null; // <--- ESCUDO
 
         const parsearRelacionados = (valor) => {
           if (!valor) return []; 
@@ -81,15 +86,23 @@ function Pedidos({ onVolver }) {
           return String(valor).split(',').map(v => v.trim());
         };
 
+        // --- LÓGICA MAYORISTA INTEGRADA ---
+        const precioGen = limpiarPrecio(p.precio);
+        // Buscamos cualquier variación de nombre de columna
+        const rawMay = p.mayorista || p.preciomayorista || p.precio_mayorista;
+        const precioMay = rawMay ? limpiarPrecio(rawMay) : precioGen;
+        // ----------------------------------
+
         return {
-          id: p.ID || p.id || Math.random(), // <--- ESCUDO: Evita crash por key duplicada o undefined
-          nombre: p.nombre || p.Nombre || 'SIN NOMBRE',
-          precio: limpiarPrecio(p.precio),
+          id: p.ID || p.id || Math.random(), // <--- ESCUDO
+          nombre: String(p.nombre || p.Nombre || 'SIN NOMBRE'), // Agregamos String() para evitar crash
+          precio: precioGen,
+          precioMayorista: precioMay, // Guardamos el precio mayorista
           stock: parseInt(p.stock) || 0,
           categoria: p.categoria || "Sin categoría",
           sugerencias: parsearRelacionados(p.sugerencias || p.Sugerencias || p.sugerido) 
         }
-      }).filter(Boolean); // <--- LIMPIEZA: Elimina los nulls generados arriba
+      }).filter(Boolean); // <--- LIMPIEZA
 
       // 3. Procesar Clientes
       const cMapeados = safeCRaw.map(c => {
@@ -101,27 +114,64 @@ function Pedidos({ onVolver }) {
           return String(valor).split(',').map(v => v.trim()); 
         };
 
+        // --- DETECTAR LISTA POR DEFECTO ---
+        let listaPref = 'general';
+        if (c.lista && String(c.lista).toLowerCase().includes('may')) {
+            listaPref = 'mayorista';
+        }
+        // ----------------------------------
+
         return {
           id: c.ID || c.id || Math.random(),
-          nombre: c.nombre || c.Nombre || 'SIN NOMBRE',
+          nombre: String(c.nombre || c.Nombre || 'SIN NOMBRE'), // Agregamos String()
           direccion: c.direccion || '',
           telefono: c.telefono || c.Telefono || '',
           lat: c.lat || null, 
           lon: c.lon || null,
-          top10: parsearIds(c.top10)
+          top10: parsearIds(c.top10),
+          listaDefecto: listaPref // Guardamos la preferencia
         };
       }).filter(Boolean);
 
       setClientes(cMapeados);
       setProductos(pMapeados);
 
+      // --- RECUPERACIÓN AUTOMÁTICA DE BORRADOR ---
+      const borrador = JSON.parse(localStorage.getItem('pedido_borrador'));
+      if (borrador) {
+          if (borrador.clienteId) setClienteId(borrador.clienteId);
+          if (borrador.busquedaCliente) setBusquedaCliente(borrador.busquedaCliente);
+          if (borrador.tipoPrecio) setTipoPrecio(borrador.tipoPrecio);
+          if (borrador.carrito) setCarrito(borrador.carrito);
+          if (borrador.observacion) setObservacion(borrador.observacion);
+      }
+      // -------------------------------------------
+
     } catch (error) {
       console.error("❌ Error FATAL cargando datos:", error);
-      // Opcional: localStorage.clear(); // Si quieres ser drástico ante errores
     }
   }, [])
 
-// --- NUEVO: PREVENIR RECARGA ACCIDENTAL ---
+  // --- NUEVO: GUARDADO AUTOMÁTICO DE BORRADOR ---
+  useEffect(() => {
+    // Solo guardamos si hay un cliente seleccionado O cosas en el carrito
+    if (clienteId || carrito.length > 0) {
+        const estadoActual = {
+            clienteId,
+            busquedaCliente,
+            tipoPrecio,
+            carrito,
+            observacion
+        };
+        localStorage.setItem('pedido_borrador', JSON.stringify(estadoActual));
+    } else {
+        // Si el pedido está vacío, limpiamos el borrador para no guardar basura
+        localStorage.removeItem('pedido_borrador');
+    }
+  }, [clienteId, busquedaCliente, tipoPrecio, carrito, observacion]); 
+  // ----------------------------------------------
+
+  // --- NUEVO: PREVENIR RECARGA ACCIDENTAL ---
   useEffect(() => {
     const handleBeforeUnload = (e) => {
       // Solo activamos la alerta si hay cosas en el carrito
@@ -139,7 +189,7 @@ function Pedidos({ onVolver }) {
   }, [carrito]); // Se re-ejecuta si cambia el carrito  
   
 
-  // --- FILTROS ---
+  // --- FILTROS (Con protección String) ---
   const clientesFiltrados = clientes.filter(c => 
     c.nombre && String(c.nombre).toLowerCase().includes(busquedaCliente.toLowerCase())
   )
@@ -148,10 +198,22 @@ function Pedidos({ onVolver }) {
     p.nombre && String(p.nombre).toLowerCase().includes(busquedaProducto.toLowerCase())
   )
 
+  // --- HELPER PARA OBTENER PRECIO ACTUAL ---
+  const getPrecioVigente = (prod) => {
+     if (!prod) return 0;
+     return tipoPrecio === 'mayorista' ? prod.precioMayorista : prod.precio;
+  }
+  // -----------------------------------------
+
   // --- SELECCIONAR ---
   const seleccionarCliente = (cliente) => {
     setClienteId(cliente.id)
     setBusquedaCliente(String(cliente.nombre))
+    
+    // --- CAMBIO AUTOMÁTICO DE LISTA ---
+    setTipoPrecio(cliente.listaDefecto || 'general');
+    // ----------------------------------
+
     setMostrarSugerenciasClientes(false)
     setModalVisible(null)
   }
@@ -201,7 +263,6 @@ function Pedidos({ onVolver }) {
       });
 
       if (ofertas.length === 0) {
-         // Si no hay ofertas, no mostramos nada (tal como pediste)
          return alert("No hay artículos de 'Combo' u 'Oferta' disponibles.");
       }
  
@@ -211,17 +272,13 @@ function Pedidos({ onVolver }) {
     }
 
     // CASO 2: VENTA CRUZADA (MINERÍA)
-    // Tomamos el ÚLTIMO producto agregado al carrito
     const ultimoItem = carrito[carrito.length - 1];
-    
-    // Buscamos ese producto en nuestra base maestra para leer sus relaciones
     const productoPadre = productos.find(p => String(p.id) === String(ultimoItem.productoId));
 
     if (!productoPadre || !productoPadre.sugerencias || productoPadre.sugerencias.length === 0) {
       return alert(`El producto "${ultimoItem.nombre}" no tiene sugerencias asociadas en el sistema.`);
     }
 
-    // Convertimos los IDs sugeridos (ej: [200, 201]) en objetos Producto reales
     const productosSugeridos = obtenerProductosDesdeIds(productoPadre.sugerencias);
 
     if (productosSugeridos.length === 0) {
@@ -244,7 +301,10 @@ function Pedidos({ onVolver }) {
     
     if (!productoReal) return
 
-    const precioFinal = Number(productoReal.precio) || 0;
+    // --- USAMOS EL PRECIO VIGENTE ---
+    const precioFinal = getPrecioVigente(productoReal);
+    // --------------------------------
+    
     const cantidadFinal = parseInt(cantidad) || 1;
     const subtotalFinal = precioFinal * cantidadFinal;
 
@@ -253,6 +313,7 @@ function Pedidos({ onVolver }) {
       productoId: productoReal.id,
       nombre: productoReal.nombre,
       precio: precioFinal,
+      listaAplicada: tipoPrecio, // Guardamos qué lista se usó
       cantidad: cantidadFinal,
       subtotal: subtotalFinal
     }
@@ -266,6 +327,19 @@ function Pedidos({ onVolver }) {
   const eliminarDelCarrito = (id) => {
     setCarrito(carrito.filter(item => item.id !== id))
   }
+
+  // --- CANCELAR BORRADOR (NUEVA FUNCIÓN) ---
+  const cancelarBorrador = () => {
+    if (confirm("¿Estás seguro de cancelar este pedido y borrar los datos?")) {
+        setCarrito([]);
+        setClienteId('');
+        setBusquedaCliente('');
+        setObservacion('');
+        setTipoPrecio('general');
+        localStorage.removeItem('pedido_borrador');
+    }
+  }
+  // -----------------------------------------
 
   // --- FINALIZAR PEDIDO ---
   const finalizarPedido = () => {
@@ -289,19 +363,25 @@ function Pedidos({ onVolver }) {
     const historial = JSON.parse(localStorage.getItem('pedidos')) || []
     localStorage.setItem('pedidos', JSON.stringify([...historial, nuevoPedido]))
 
+    // IMPORTANTE: LIMPIAR BORRADOR AL FINALIZAR
+    localStorage.removeItem('pedido_borrador');
+
     const procesarWhatsAppYLimpiar = () => {
       let mensaje = `*NUEVO PEDIDO* 📋\n`;
       mensaje += `👤 *Cliente:* ${clienteReal.nombre}\n`;
+      // Aviso de lista
+      if (clienteReal.listaDefecto === 'mayorista') mensaje += `🏷️ *Lista:* Mayorista\n`;
       mensaje += `📅 *Fecha:* ${new Date().toLocaleDateString('es-AR')}\n`;
       mensaje += `--------------------------\n`;
       
       carrito.forEach(item => {
         const sub = Number(item.subtotal).toLocaleString('es-AR');
-        mensaje += `▪️ ${item.cantidad} x ${item.nombre} ($ ${sub})\n`;
+        // Tag si fue mayorista
+        const tag = item.listaAplicada === 'mayorista' ? '(May)' : '';
+        mensaje += `▪️ ${item.cantidad} x ${item.nombre} ${tag} ($ ${sub})\n`;
       });
 
       mensaje += `--------------------------\n`;
-      // USAMOS FORMATODINERO AQUI TAMBIEN
       mensaje += `💰 *TOTAL: ${formatoDinero(totalSafe)}*\n`;
       if (observacion) mensaje += `📝 *Nota:* ${observacion}`;
 
@@ -322,6 +402,7 @@ function Pedidos({ onVolver }) {
       setClienteId('')
       setBusquedaCliente('')
       setObservacion('')
+      setTipoPrecio('general') // Reset
       onVolver() 
     };
 
@@ -416,6 +497,8 @@ function Pedidos({ onVolver }) {
             setBusquedaCliente(e.target.value)
             setMostrarSugerenciasClientes(true)
             setClienteId('')
+            setTipoPrecio('general') // Reset al borrar
+            setVerOpciones(false)    // Reset opciones
           }}
           onFocus={() => setMostrarSugerenciasClientes(true)}
           style={inputStyle}
@@ -427,7 +510,10 @@ function Pedidos({ onVolver }) {
               clientesFiltrados.map(c => (
                 <li key={c.id} onClick={() => seleccionarCliente(c)} style={{ padding: '12px', cursor: 'pointer', borderBottom: '1px solid #444', color: 'white', display: 'flex', justifyContent: 'space-between' }}>
                   <span>{c.nombre}</span>
-                  {c.lat && <span title="Tiene GPS">📍</span>}
+                  {/* Badge Mayorista */}
+                  {c.listaDefecto === 'mayorista' && 
+                    <span style={{ fontSize: '0.7rem', background: '#ff9800', color: 'black', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>MAYORISTA</span>
+                  }
                 </li>
               ))
             ) : (
@@ -437,9 +523,43 @@ function Pedidos({ onVolver }) {
         )}
       </div>
 
+      {/* --- SWITCH LISTA DE PRECIOS (NUEVO) --- */}
+      <div style={{ width: '100%', maxWidth: '350px', marginBottom: '15px', display: 'flex', background: '#333', borderRadius: '8px', padding: '4px', border: '1px solid #444' }}>
+          <button 
+            onClick={() => setTipoPrecio('general')}
+            style={{ 
+                flex: 1, 
+                padding: '10px', 
+                background: tipoPrecio === 'general' ? '#4caf50' : 'transparent', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '6px',
+                fontWeight: tipoPrecio === 'general' ? 'bold' : 'normal',
+                opacity: tipoPrecio === 'general' ? 1 : 0.5,
+                transition: '0.3s'
+            }}>
+            🛒 General
+          </button>
+          <button 
+            onClick={() => setTipoPrecio('mayorista')}
+            style={{ 
+                flex: 1, 
+                padding: '10px', 
+                background: tipoPrecio === 'mayorista' ? '#e91e63' : 'transparent', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '6px',
+                fontWeight: tipoPrecio === 'mayorista' ? 'bold' : 'normal',
+                opacity: tipoPrecio === 'mayorista' ? 1 : 0.5,
+                transition: '0.3s'
+            }}>
+            🏭 Mayorista
+          </button>
+      </div>
+      {/* --------------------------------------- */}
+
       {/* BOTONES INTELIGENTES */}
       <div style={{ width: '100%', maxWidth: '350px', display: 'flex', gap: '10px', marginBottom: '20px' }}>
-         {/* TOP 10 DEPENDIENTE DE CLIENTE */}
          <button 
            onClick={abrirTop10}
            disabled={!clienteId}
@@ -456,7 +576,6 @@ function Pedidos({ onVolver }) {
            ⭐ Top 10 (Histórico)
          </button>
          
-         {/* SUGERENCIAS AHORA ES GLOBAL O POR CARRITO */}
          <button 
            onClick={abrirSugerencias}
            style={{
@@ -498,8 +617,10 @@ function Pedidos({ onVolver }) {
                 justifyContent: 'space-between'
               }}>
                 <span>{p.nombre}</span>
-                {/* --- USA EL FORMATO BONITO ($ 11.500) --- */}
-                <span style={{color: '#4caf50'}}>{formatoDinero(p.precio)}</span>
+                {/* --- PRECIO DINÁMICO EN MODAL --- */}
+                <span style={{color: tipoPrecio === 'mayorista' ? '#e91e63' : '#4caf50'}}>
+                    {formatoDinero(getPrecioVigente(p))}
+                </span>
               </li>
             ))}
             {listaParaMostrar.length === 0 && <li style={{padding:'10px', color:'#777'}}>Sin datos disponibles.</li>}
@@ -509,7 +630,9 @@ function Pedidos({ onVolver }) {
 
       {/* SECCION PRODUCTO */}
       <div style={{ width: '100%', maxWidth: '350px', marginBottom: '30px', position: 'relative' }}>
-        <label style={{ display: 'block', marginBottom: '8px', color: '#aaa' }}>Producto</label>
+        <label style={{ display: 'block', marginBottom: '8px', color: '#aaa' }}>
+            Producto ({tipoPrecio === 'mayorista' ? 'Mayorista' : 'General'})
+        </label>
         <div style={{ display: 'flex', gap: '10px' }}>
           <div style={{ flex: 1, position: 'relative' }}>
             <input 
@@ -530,7 +653,10 @@ function Pedidos({ onVolver }) {
                   productosFiltrados.map(p => (
                     <li key={p.id} onClick={() => seleccionarProducto(p)} style={{ padding: '12px', cursor: 'pointer', borderBottom: '1px solid #444', color: 'white', display: 'flex', justifyContent: 'space-between' }}>
                       <span>{p.nombre}</span>
-                      <span style={{ color: '#4caf50' }}>{formatoDinero(p.precio)}</span>
+                      {/* --- PRECIO DINÁMICO EN DROPDOWN --- */}
+                      <span style={{ color: tipoPrecio === 'mayorista' ? '#e91e63' : '#4caf50' }}>
+                        {formatoDinero(getPrecioVigente(p))}
+                      </span>
                     </li>
                   ))
                 ) : (
@@ -576,8 +702,10 @@ function Pedidos({ onVolver }) {
                     ✕
                   </button>
                 </div>
-                <div style={{ textAlign: 'right', color: '#888', fontSize: '0.85rem' }}>
-                  Subtotal: {formatoDinero(item.subtotal)}
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#888', fontSize: '0.85rem' }}>
+                   {/* --- INDICADOR DE LISTA --- */}
+                   <span>{item.listaAplicada === 'mayorista' ? '🏭 Mayorista' : '🛒 General'}</span>
+                   <span>Subtotal: {formatoDinero(item.subtotal)}</span>
                 </div>
               </li>
             ))}
@@ -612,12 +740,44 @@ function Pedidos({ onVolver }) {
           />
         </div>
 
-        <button 
-          onClick={finalizarPedido} 
-          style={{ width: '100%', marginTop: '20px', padding: '15px', background: '#4caf50', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1rem', fontWeight: 'bold' }}
-        >
-          ✅ FINALIZAR PEDIDO
-        </button>
+        {/* --- BOTONES DE ACCION (Cancelar solo si hay borrador) --- */}
+        <div style={{marginTop: '20px', display:'flex', gap:'10px'}}>
+            
+            {/* BOTÓN CANCELAR (CONDICIONAL) */}
+            {(carrito.length > 0 || clienteId) && (
+                <button 
+                    onClick={cancelarBorrador} 
+                    style={{ 
+                        flex: 1,
+                        padding: '15px', 
+                        background: 'transparent', 
+                        color: '#ff5252', 
+                        border: '1px solid #ff5252', 
+                        borderRadius: '8px', 
+                        fontSize: '1rem', 
+                        fontWeight: 'bold' 
+                    }}
+                >
+                    🗑️ Cancelar
+                </button>
+            )}
+
+            <button 
+              onClick={finalizarPedido} 
+              style={{ 
+                  flex: 2, // Más ancho para destacar
+                  padding: '15px', 
+                  background: '#4caf50', 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '8px', 
+                  fontSize: '1.1rem', 
+                  fontWeight: 'bold' 
+              }}
+            >
+              ✅ FINALIZAR PEDIDO
+            </button>
+        </div>
       </div>
 
       <button onClick={onVolver} style={{ marginTop: '30px', background: 'transparent', border: '1px solid #666', color: '#aaa', padding: '10px 20px', borderRadius: '20px' }}>

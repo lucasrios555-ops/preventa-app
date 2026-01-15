@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import './App.css'
 
 // ⚠️ ASEGÚRATE DE QUE ESTA URL SEA LA DE TU ÚLTIMA IMPLEMENTACIÓN (V3)
-const URL_API = "https://script.google.com/macros/s/AKfycbyICo_zY-cW3-4JrgN_FQ7Kl9Bd8GsL0o_8RoIfJ2zfRN7m5-C-gDJMUhzHATDr0AiQ/exec"; 
+const URL_API = "https://script.google.com/macros/s/AKfycbzHf8eDVGSjYO7ZoQcVwlMOA8loFuFHmqQ6jdibh7FZb_lbWYE-TsxrLaXWTCFtnexL/exec"; 
 
 function Sincronizar({ onVolver }) {
   const [pedidos, setPedidos] = useState([])

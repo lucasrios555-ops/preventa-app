@@ -3,7 +3,7 @@ import './App.css'
 
 // URL DE TU SCRIPT DE GOOGLE (Asegúrate que sea el mismo que en Sincronizar.jsx)
 // ⚠️ IMPORTANTE: Necesitaremos actualizar el Google Apps Script para que soporte esto.
-const URL_API = "https://script.google.com/macros/s/AKfycbyICo_zY-cW3-4JrgN_FQ7Kl9Bd8GsL0o_8RoIfJ2zfRN7m5-C-gDJMUhzHATDr0AiQ/exec"; 
+const URL_API = "https://script.google.com/macros/s/AKfycbzHf8eDVGSjYO7ZoQcVwlMOA8loFuFHmqQ6jdibh7FZb_lbWYE-TsxrLaXWTCFtnexL/exec"; 
 
 function Compras({ onVolver }) {
   const [listaCompra, setListaCompra] = useState([])
